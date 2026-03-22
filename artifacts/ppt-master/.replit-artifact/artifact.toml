@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "AI PPT 生成平台"
+version = "1.0.0"
+id = "artifacts/ppt-master"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23983
+
+[services.development]
+run = "pnpm --filter @workspace/ppt-master run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ppt-master", "run", "build" ]
+publicDir = "artifacts/ppt-master/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23983"
+BASE_PATH = "/"

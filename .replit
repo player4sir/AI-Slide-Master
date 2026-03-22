@@ -24,3 +24,8 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.shared]
+DEEPSEEK_API_KEY = "sk-42d2c4c52a8c4616a67da4d1e493205e"

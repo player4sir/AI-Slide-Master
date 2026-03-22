@@ -1,0 +1,19 @@
+packages:
+  "framer-motion": "For page transitions, progress animations, and smooth UI reveals"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility to resolve Tailwind CSS class conflicts"
+  "lucide-react": "Beautiful, consistent icons for the interface"
+  "date-fns": "For formatting history timestamps nicely"
+
+images:
+  - path: "artifacts/ppt-master/public/images/logo.png"
+    description: "Minimalist modern geometric AI logo mark resembling layered slides or a spark, in vibrant blue and indigo gradients, professional SaaS style, completely transparent background"
+    aspect_ratio: "1:1"
+  - path: "artifacts/ppt-master/public/images/hero-bg.png"
+    description: "Abstract subtle gradient mesh background in deep indigo, slate, and vibrant blue. Clean professional SaaS style, soft glowing light leaks, smooth atmospheric depth"
+    aspect_ratio: "16:9"
+
+notes:
+  - "Assumes @workspace/api-client-react exports hooks and types correctly from its index."
+  - "Uses TanStack Query v5 polling mechanisms."
+  - "The download endpoint returns a Blob which is handled on the client side via URL.createObjectURL."
