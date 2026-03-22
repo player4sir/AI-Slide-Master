@@ -843,7 +843,6 @@ function buildConclusionSlide(slide: PptxGenJS.Slide, content: SlideContent, the
         color: "FFFFFF",
         fontFace: "Calibri",
         paraSpaceAfter: 12,
-        transparency: 10,
       },
     }));
 
@@ -889,15 +888,25 @@ function addDecorativeIllustration(
     });
   });
 
-  // Lines connecting nodes to center
+  // Connecting lines from center to each satellite node
+  // We draw them as thin rects (not "line" shapes) to avoid negative dimensions
   for (let i = 1; i < nodes.length; i++) {
     const n = nodes[i];
-    slide.addShape("line", {
-      x: cx + nodes[0].dx,
-      y: cy + nodes[0].dy,
-      w: n.dx,
-      h: n.dy,
-      line: { color: theme.secondary, width: 1 },
+    // Start point: center circle
+    const x1 = cx + nodes[0].dx;
+    const y1 = cy + nodes[0].dy;
+    // End point: satellite node center
+    const x2 = cx + n.dx;
+    const y2 = cy + n.dy;
+    // Bounding box (always non-negative w/h)
+    const lx = Math.min(x1, x2);
+    const ly = Math.min(y1, y2);
+    const lw = Math.max(Math.abs(x2 - x1), 0.02);
+    const lh = Math.max(Math.abs(y2 - y1), 0.02);
+    slide.addShape("rect", {
+      x: lx, y: ly, w: lw, h: lh,
+      fill: { color: theme.secondary },
+      line: { type: "none" },
       transparency: 70,
     });
   }
