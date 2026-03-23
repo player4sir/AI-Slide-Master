@@ -17,6 +17,8 @@ export const pptJobsTable = pgTable("ppt_jobs", {
   outline: jsonb("outline"),
   filePath: text("file_path"),
   error: text("error"),
+  isSaved: integer("is_saved").notNull().default(0),
+  savedName: text("saved_name"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   completedAt: timestamp("completed_at"),
 });

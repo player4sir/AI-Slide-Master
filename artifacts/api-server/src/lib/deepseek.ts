@@ -13,6 +13,26 @@ function createDeepSeekClient() {
 
 export const deepseek = createDeepSeekClient();
 
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+  baseDelayMs = 1500
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxAttempts) {
+        const delay = baseDelayMs * Math.pow(2, attempt - 1);
+        await new Promise((res) => setTimeout(res, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
 export interface ChartSeries {
   name: string;
   values: number[];
@@ -66,6 +86,41 @@ export interface PPTOutline {
   slides: SlideContent[];
 }
 
+function validateAndFixChartData(chartData: ChartData | undefined): ChartData | undefined {
+  if (!chartData) return undefined;
+
+  let { chartType, labels, series } = chartData;
+
+  if (!labels || labels.length === 0) return undefined;
+  if (!series || series.length === 0) return undefined;
+
+  if (chartType === "pie" || chartType === "donut") {
+    series = [series[0]];
+    if (!series[0]) return undefined;
+    series[0].values = series[0].values
+      .slice(0, labels.length)
+      .map((v) => Math.max(1, Math.abs(Number(v) || 1)));
+    const sum = series[0].values.reduce((a, b) => a + b, 0);
+    if (sum <= 0) return undefined;
+    series[0].values = series[0].values.map((v) => Math.round((v / sum) * 100));
+  } else {
+    series = series.map((s) => ({
+      ...s,
+      values: s.values
+        .slice(0, labels.length)
+        .map((v) => Math.max(0, Math.abs(Number(v) || 0))),
+    }));
+  }
+
+  labels = labels.slice(0, 8);
+  series = series.map((s) => ({
+    ...s,
+    values: s.values.slice(0, labels.length),
+  }));
+
+  return { ...chartData, chartType, labels, series };
+}
+
 export async function planOutline(params: {
   topic: string;
   language: string;
@@ -73,12 +128,14 @@ export async function planOutline(params: {
   style: string;
   audience?: string;
   additionalRequirements?: string;
+  documentContext?: string;
 }): Promise<PPTOutline> {
-  const { topic, language, slideCount, style, audience, additionalRequirements } = params;
+  const { topic, language, slideCount, style, audience, additionalRequirements, documentContext } = params;
 
   const langName = language === "zh" ? "Chinese (Simplified)" : "English";
   const audienceStr = audience ? `Target audience: ${audience}` : "";
   const reqStr = additionalRequirements ? `Additional requirements: ${additionalRequirements}` : "";
+  const docStr = documentContext ? `\nReference document content (extract key points from this):\n---\n${documentContext.slice(0, 3000)}\n---` : "";
 
   const systemPrompt = `You are an expert presentation designer and content strategist. Create rich, visually engaging presentation outlines. Always respond with valid JSON only.`;
 
@@ -88,6 +145,7 @@ Topic: ${topic}
 Style: ${style}
 ${audienceStr}
 ${reqStr}
+${docStr}
 
 Return a JSON object:
 {
@@ -117,20 +175,21 @@ Rules:
 - Vary visual types for engagement - use charts and stats where data would strengthen the point
 - Total: exactly ${slideCount} slides`;
 
-  const response = await deepseek.chat.completions.create({
-    model: "deepseek-chat",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
-    response_format: { type: "json_object" },
-    temperature: 0.7,
-  });
-
-  const content = response.choices[0].message.content;
-  if (!content) throw new Error("No content returned from AI");
-
-  return JSON.parse(content) as PPTOutline;
+  return withRetry(() =>
+    deepseek.chat.completions.create({
+      model: "deepseek-chat",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.7,
+    }).then((response) => {
+      const content = response.choices[0].message.content;
+      if (!content) throw new Error("No content returned from AI");
+      return JSON.parse(content) as PPTOutline;
+    })
+  );
 }
 
 export async function enrichSlideContent(
@@ -162,10 +221,10 @@ Also generate "chartData" with realistic, topic-relevant data:
   }
 }
 - For trend over time: use "line" chart with 5-6 time points
-- For part-of-whole: use "pie" or "donut" with 4-6 segments
+- For part-of-whole: use "pie" or "donut" with 4-6 segments, EXACTLY 1 series, values roughly summing to 100
 - For comparison: use "bar" with 3-5 categories
 - Values must be realistic and meaningful for the topic
-- For pie/donut: values should roughly sum to 100`;
+- For pie/donut: provide ONLY 1 series and values should sum to ~100`;
   } else if (visualType === "stats") {
     visualInstructions = `
 Also generate "stats" with 3-4 impressive key statistics:
@@ -226,7 +285,7 @@ Current key points: ${JSON.stringify(slide.keyPoints)}
 Return JSON:
 {
   "keyPoints": ["enhanced point 1", "enhanced point 2", "enhanced point 3"],
-  "notes": "Enhanced speaker notes"
+  "notes": "Detailed speaker notes for presenting this slide"
   ${visualInstructions ? `// Plus the visual data fields described below` : ""}
 }
 ${visualInstructions}
@@ -234,29 +293,31 @@ ${visualInstructions}
 Requirements:
 - Write ALL text content in ${langName}
 - Key points: complete, impactful statements (10-25 words each), 3-4 points
-- Notes: 2-3 sentences of additional context
+- Notes: 3-4 sentences covering what to say when presenting this slide — include key talking points, data context, and how to transition to the next slide
 - ${context.style} tone throughout
 - Visual data must be directly relevant to "${slide.title}"`;
 
-  const response = await deepseek.chat.completions.create({
-    model: "deepseek-chat",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
-    response_format: { type: "json_object" },
-    temperature: 0.65,
-  });
+  const enriched = await withRetry(() =>
+    deepseek.chat.completions.create({
+      model: "deepseek-chat",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.65,
+    }).then((response) => {
+      const responseContent = response.choices[0].message.content;
+      if (!responseContent) return {} as Partial<SlideContent>;
+      return JSON.parse(responseContent) as Partial<SlideContent>;
+    })
+  );
 
-  const responseContent = response.choices[0].message.content;
-  if (!responseContent) return slide;
-
-  const enriched = JSON.parse(responseContent) as Partial<SlideContent>;
   return {
     ...slide,
     keyPoints: enriched.keyPoints || slide.keyPoints,
     notes: enriched.notes || slide.notes,
-    chartData: enriched.chartData || slide.chartData,
+    chartData: validateAndFixChartData(enriched.chartData) || slide.chartData,
     stats: enriched.stats || slide.stats,
     processSteps: enriched.processSteps || slide.processSteps,
     comparison: enriched.comparison || slide.comparison,
