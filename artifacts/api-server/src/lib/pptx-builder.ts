@@ -1,7 +1,16 @@
 import PptxGenJS from "pptxgenjs";
-import type { SlideContent, PPTOutline, ChartData, StatItem, ProcessStep, ComparisonColumn } from "./deepseek.js";
+import type { SlideContent, PPTOutline } from "./deepseek.js";
 import path from "path";
 import os from "os";
+
+// ─── SLIDE CONSTANTS (LAYOUT_WIDE = 13.33" × 7.5") ──────────────────────────
+const SLIDE_W = 13.33;
+const SLIDE_H = 7.5;
+const PAD = 0.45;          // horizontal padding/margin
+const CW = SLIDE_W - PAD * 2; // 12.43" usable content width
+const HEADER_H = 1.15;     // header bar height
+const FOOTER_Y = 7.1;      // footer bar top
+const CONTENT_Y = HEADER_H + 0.1; // top of content area
 
 const THEME_COLORS = {
   professional: {
@@ -11,12 +20,9 @@ const THEME_COLORS = {
     accent: "E85D75",
     text: "1A1A2E",
     textLight: "64748B",
-    bullet: "2E86AB",
     card: "FFFFFF",
     cardBorder: "E2E8F0",
     chart: ["2E86AB", "E85D75", "10B981", "F59E0B", "8B5CF6", "06B6D4"],
-    gradient1: "1E3A5F",
-    gradient2: "2E86AB",
   },
   creative: {
     background: "0F0E17",
@@ -25,12 +31,9 @@ const THEME_COLORS = {
     accent: "E53170",
     text: "FFFFFE",
     textLight: "A7A9BE",
-    bullet: "FF8906",
     card: "1A1926",
     cardBorder: "2E2B3B",
     chart: ["FF8906", "E53170", "F25F4C", "7209B7", "3A0CA3", "4CC9F0"],
-    gradient1: "0F0E17",
-    gradient2: "1F1E2E",
   },
   minimal: {
     background: "FAFAFA",
@@ -39,12 +42,9 @@ const THEME_COLORS = {
     accent: "0066FF",
     text: "111111",
     textLight: "888888",
-    bullet: "0066FF",
     card: "FFFFFF",
     cardBorder: "E5E5E5",
     chart: ["0066FF", "111111", "10B981", "F59E0B", "8B5CF6", "06B6D4"],
-    gradient1: "111111",
-    gradient2: "333333",
   },
   academic: {
     background: "FAFFF8",
@@ -53,12 +53,9 @@ const THEME_COLORS = {
     accent: "40916C",
     text: "1B4332",
     textLight: "52796F",
-    bullet: "2D6A4F",
     card: "FFFFFF",
     cardBorder: "D8F3DC",
     chart: ["2D6A4F", "40916C", "74C69D", "B7E4C7", "1B4332", "95D5B2"],
-    gradient1: "1B4332",
-    gradient2: "2D6A4F",
   },
 } as const;
 
@@ -100,195 +97,146 @@ export async function buildPPTX(outline: PPTOutline, style: string): Promise<str
   return filePath;
 }
 
+// ─── SHARED HELPERS ───────────────────────────────────────────────────────────
+
 function addSlideNumber(slide: PptxGenJS.Slide, number: number, theme: Theme) {
   slide.addText(`${number}`, {
-    x: "90%", y: "93%", w: "8%", h: "5%",
-    fontSize: 10,
-    color: theme.textLight,
-    align: "right",
-    fontFace: "Calibri",
+    x: SLIDE_W - 1.2, y: FOOTER_Y + 0.05, w: 0.8, h: 0.3,
+    fontSize: 10, color: theme.textLight, align: "right", fontFace: "Calibri",
   });
 }
 
 function addHeaderBar(slide: PptxGenJS.Slide, title: string, theme: Theme) {
   slide.addShape("rect", {
-    x: 0, y: 0, w: "100%", h: 1.1,
-    fill: { color: theme.primary },
-    line: { type: "none" },
+    x: 0, y: 0, w: "100%", h: HEADER_H,
+    fill: { color: theme.primary }, line: { type: "none" },
   });
-
   slide.addShape("rect", {
-    x: 0, y: 1.07, w: "100%", h: 0.06,
-    fill: { color: theme.accent },
-    line: { type: "none" },
+    x: 0, y: HEADER_H - 0.06, w: "100%", h: 0.06,
+    fill: { color: theme.accent }, line: { type: "none" },
   });
-
   slide.addText(title, {
-    x: 0.45, y: 0, w: 9.0, h: 1.1,
-    fontSize: 22,
-    bold: true,
-    color: "FFFFFF",
-    align: "left",
-    valign: "middle",
-    fontFace: "Calibri",
+    x: PAD, y: 0, w: CW, h: HEADER_H,
+    fontSize: 22, bold: true, color: "FFFFFF",
+    align: "left", valign: "middle", fontFace: "Calibri",
   });
 }
 
 function addFooterBar(slide: PptxGenJS.Slide, theme: Theme) {
   slide.addShape("rect", {
-    x: 0, y: 7.1, w: "100%", h: 0.4,
-    fill: { color: theme.primary },
-    line: { type: "none" },
+    x: 0, y: FOOTER_Y, w: "100%", h: SLIDE_H - FOOTER_Y,
+    fill: { color: theme.primary }, line: { type: "none" },
     transparency: 90,
   });
 }
 
-// ─── TITLE SLIDE ─────────────────────────────────────────────────────────────
+// ─── TITLE SLIDE ──────────────────────────────────────────────────────────────
 
 function buildTitleSlide(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideContent, theme: Theme) {
-  // Full left panel
-  slide.addShape("rect", {
-    x: 0, y: 0, w: 5.5, h: "100%",
-    fill: { color: theme.primary },
-    line: { type: "none" },
-  });
+  const leftW = 6.0; // left panel width
 
-  // Accent stripe
+  // Left panel
   slide.addShape("rect", {
-    x: 5.4, y: 0, w: 0.18, h: "100%",
-    fill: { color: theme.accent },
-    line: { type: "none" },
+    x: 0, y: 0, w: leftW, h: "100%",
+    fill: { color: theme.primary }, line: { type: "none" },
   });
-
+  // Accent stripe between panels
+  slide.addShape("rect", {
+    x: leftW - 0.15, y: 0, w: 0.18, h: "100%",
+    fill: { color: theme.accent }, line: { type: "none" },
+  });
   // Decorative circles on left panel
   slide.addShape("ellipse", {
     x: -1.5, y: -1.5, w: 4, h: 4,
-    fill: { color: theme.secondary },
-    line: { type: "none" },
-    transparency: 80,
+    fill: { color: theme.secondary }, line: { type: "none" }, transparency: 80,
   });
   slide.addShape("ellipse", {
-    x: 3.2, y: 4.5, w: 3, h: 3,
-    fill: { color: theme.accent },
-    line: { type: "none" },
-    transparency: 85,
+    x: 3.5, y: 5.0, w: 3.5, h: 3.5,
+    fill: { color: theme.accent }, line: { type: "none" }, transparency: 85,
   });
 
   // Title text
   slide.addText(content.title, {
-    x: 0.5, y: 1.8, w: 4.7, h: 2.8,
-    fontSize: 34,
-    bold: true,
-    color: "FFFFFF",
-    align: "left",
-    valign: "middle",
-    wrap: true,
-    fontFace: "Calibri",
+    x: 0.5, y: 1.8, w: leftW - 0.8, h: 2.8,
+    fontSize: 32, bold: true, color: "FFFFFF",
+    align: "left", valign: "middle", wrap: true, fontFace: "Calibri",
     lineSpacingMultiple: 1.15,
   });
 
-  // Subtitle from keyPoints
   if (content.keyPoints?.length > 0) {
     slide.addText(content.keyPoints[0], {
-      x: 0.5, y: 4.7, w: 4.7, h: 0.9,
-      fontSize: 15,
-      color: theme.secondary,
-      align: "left",
-      valign: "top",
-      wrap: true,
-      fontFace: "Calibri",
+      x: 0.5, y: 4.7, w: leftW - 0.8, h: 0.9,
+      fontSize: 14, color: theme.secondary,
+      align: "left", valign: "top", wrap: true, fontFace: "Calibri",
     });
   }
 
-  // Divider line
+  // Divider
   slide.addShape("line", {
-    x: 0.5, y: 4.5, w: 4.2, h: 0,
+    x: 0.5, y: 4.5, w: leftW - 1.0, h: 0,
     line: { color: theme.secondary, width: 1.5 },
   });
 
   // Branding
   slide.addText("AI PPT 生成平台  ·  Powered by DeepSeek", {
-    x: 0.5, y: 6.6, w: 4.7, h: 0.4,
-    fontSize: 10,
-    color: "FFFFFF",
-    align: "left",
-    fontFace: "Calibri",
+    x: 0.5, y: 6.7, w: leftW - 0.8, h: 0.4,
+    fontSize: 9, color: "FFFFFF", align: "left", fontFace: "Calibri",
     transparency: 40,
   });
 
-  // Right panel: decorative abstract shapes
-  addDecorativeIllustration(slide, theme, 6.2, 1.0, 3.0, 5.5);
+  // Right panel decorative illustration
+  addDecorativeIllustration(slide, theme, leftW + 0.3, 0.8, SLIDE_W - leftW - 0.6, SLIDE_H - 1.0);
 }
 
-// ─── SECTION SLIDE ───────────────────────────────────────────────────────────
+// ─── SECTION SLIDE ────────────────────────────────────────────────────────────
 
 function buildSectionSlide(slide: PptxGenJS.Slide, content: SlideContent, theme: Theme) {
-  // Background gradient via shapes
   slide.addShape("rect", {
     x: 0, y: 0, w: "100%", h: "100%",
-    fill: { color: theme.primary },
-    line: { type: "none" },
+    fill: { color: theme.primary }, line: { type: "none" },
   });
-
-  // Decorative overlay
   slide.addShape("rect", {
     x: 0, y: 0, w: "100%", h: "100%",
-    fill: { color: theme.secondary },
-    line: { type: "none" },
-    transparency: 88,
+    fill: { color: theme.secondary }, line: { type: "none" }, transparency: 88,
   });
 
-  // Big section number
+  // Big section number circle
   slide.addShape("ellipse", {
     x: 0.6, y: 2.0, w: 2.2, h: 2.2,
-    fill: { color: theme.accent },
-    line: { type: "none" },
-    transparency: 85,
+    fill: { color: theme.accent }, line: { type: "none" }, transparency: 85,
   });
   slide.addText(`${content.slideNumber}`, {
     x: 0.6, y: 2.0, w: 2.2, h: 2.2,
-    fontSize: 52,
-    bold: true,
-    color: "FFFFFF",
-    align: "center",
-    valign: "middle",
-    fontFace: "Calibri",
-    transparency: 40,
+    fontSize: 52, bold: true, color: "FFFFFF",
+    align: "center", valign: "middle", fontFace: "Calibri",
   });
 
-  // Accent line
+  // Content on the right side
+  const rightX = 3.5;
+  const rightW = SLIDE_W - rightX - PAD;
+
   slide.addShape("rect", {
-    x: 3.5, y: 3.1, w: 5.8, h: 0.06,
-    fill: { color: theme.accent },
-    line: { type: "none" },
+    x: rightX, y: 3.1, w: rightW, h: 0.06,
+    fill: { color: theme.accent }, line: { type: "none" },
   });
 
   slide.addText(content.title, {
-    x: 3.5, y: 2.1, w: 5.8, h: 1.8,
-    fontSize: 30,
-    bold: true,
-    color: "FFFFFF",
-    align: "left",
-    valign: "bottom",
-    wrap: true,
-    fontFace: "Calibri",
+    x: rightX, y: 2.0, w: rightW, h: 1.8,
+    fontSize: 30, bold: true, color: "FFFFFF",
+    align: "left", valign: "bottom", wrap: true, fontFace: "Calibri",
   });
 
   if (content.keyPoints?.length > 0) {
     slide.addText(content.keyPoints[0], {
-      x: 3.5, y: 3.3, w: 5.8, h: 1.2,
-      fontSize: 15,
-      color: "FFFFFF",
-      align: "left",
-      valign: "top",
-      wrap: true,
-      fontFace: "Calibri",
+      x: rightX, y: 3.3, w: rightW, h: 1.4,
+      fontSize: 15, color: "FFFFFF",
+      align: "left", valign: "top", wrap: true, fontFace: "Calibri",
       transparency: 25,
     });
   }
 }
 
-// ─── CONTENT SLIDE ROUTER ────────────────────────────────────────────────────
+// ─── CONTENT SLIDE ROUTER ─────────────────────────────────────────────────────
 
 function buildContentSlide(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideContent, theme: Theme) {
   addHeaderBar(slide, content.title, theme);
@@ -296,7 +244,6 @@ function buildContentSlide(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: Sli
   addSlideNumber(slide, content.slideNumber, theme);
 
   const vt = content.visualType;
-
   if (vt === "chart" && content.chartData) {
     buildChartSlide(pptx, slide, content, theme);
   } else if (vt === "stats" && content.stats?.length) {
@@ -312,44 +259,38 @@ function buildContentSlide(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: Sli
   }
 }
 
-// ─── CHART SLIDE ─────────────────────────────────────────────────────────────
+// ─── CHART SLIDE ──────────────────────────────────────────────────────────────
 
 function buildChartSlide(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: SlideContent, theme: Theme) {
   const chart = content.chartData!;
   const chartColors = theme.chart;
-
   const isFullChart = content.keyPoints.length <= 2;
 
   if (!isFullChart) {
-    // Left: bullets, Right: chart
+    const bulletW = 4.8;
     const bulletRows = content.keyPoints.map((pt, i) => ({
       text: pt,
       options: {
         bullet: { type: "bullet" as const, code: "25A0", color: chartColors[i % chartColors.length] },
-        fontSize: 13,
-        color: theme.text,
-        fontFace: "Calibri",
-        paraSpaceAfter: 14,
+        fontSize: 13, color: theme.text, fontFace: "Calibri", paraSpaceAfter: 14,
       },
     }));
-
     slide.addText(bulletRows, {
-      x: 0.35, y: 1.25, w: 4.0, h: 5.6,
+      x: PAD, y: CONTENT_Y, w: bulletW, h: FOOTER_Y - CONTENT_Y,
       align: "left", valign: "top", wrap: true,
     });
   }
 
-  const chartX = isFullChart ? 0.4 : 4.5;
-  const chartW = isFullChart ? 9.2 : 5.2;
+  const chartX = isFullChart ? PAD : 5.5;
+  const chartW = isFullChart ? CW : SLIDE_W - 5.5 - PAD;
+  const chartH = FOOTER_Y - CONTENT_Y;
 
-  const seriesData = chart.series.map((s, i) => ({
-    name: s.name,
-    labels: chart.labels,
-    values: s.values,
+  const seriesData = chart.series.map((s) => ({
+    name: s.name, labels: chart.labels, values: s.values,
   }));
 
   const chartOptions: PptxGenJS.IChartOpts = {
-    x: chartX, y: 1.25, w: chartW, h: 5.6,
+    x: chartX, y: CONTENT_Y, w: chartW, h: chartH,
     chartColors: chartColors.slice(0, seriesData.length),
     showLegend: chart.series.length > 1,
     legendPos: "b",
@@ -388,246 +329,209 @@ function buildChartSlide(pptx: PptxGenJS, slide: PptxGenJS.Slide, content: Slide
   }
 }
 
-// ─── STATS SLIDE ─────────────────────────────────────────────────────────────
+// ─── STATS SLIDE ──────────────────────────────────────────────────────────────
 
 function buildStatsSlide(slide: PptxGenJS.Slide, content: SlideContent, theme: Theme) {
   const stats = content.stats!.slice(0, 4);
   const count = stats.length;
-  const cardW = count === 4 ? 2.7 : count === 3 ? 3.6 : 4.0;
-  const gap = count === 4 ? 0.22 : count === 3 ? 0.3 : 0.5;
-  const startX = (9.8 - (cardW * count + gap * (count - 1))) / 2;
+
+  // Card dimensions sized to fill LAYOUT_WIDE content area
+  const cardW = count === 4 ? 2.9 : count === 3 ? 3.9 : 6.0;
+  const gap = count === 4 ? 0.27 : count === 3 ? 0.35 : 0.4;
+  const totalW = cardW * count + gap * (count - 1);
+  const startX = (SLIDE_W - totalW) / 2;
+
+  const cardY = CONTENT_Y + 0.15;
+  const cardH = FOOTER_Y - cardY - 0.1;
 
   stats.forEach((stat, i) => {
     const x = startX + i * (cardW + gap);
 
-    // Card background
     slide.addShape("rect", {
-      x, y: 1.4, w: cardW, h: 4.8,
+      x, y: cardY, w: cardW, h: cardH,
       fill: { color: theme.card },
       line: { color: theme.cardBorder, width: 1.2 },
-      shadow: {
-        type: "outer",
-        blur: 12, offset: 4, angle: 270,
-        color: "000000", opacity: 0.06,
-      },
+      shadow: { type: "outer", blur: 12, offset: 4, angle: 270, color: "000000", opacity: 0.06 },
     });
 
     // Top accent bar
     slide.addShape("rect", {
-      x, y: 1.4, w: cardW, h: 0.22,
-      fill: { color: theme.chart[i % theme.chart.length] },
-      line: { type: "none" },
+      x, y: cardY, w: cardW, h: 0.22,
+      fill: { color: theme.chart[i % theme.chart.length] }, line: { type: "none" },
     });
 
-    // Big value
+    // Big metric value
     slide.addText(stat.value, {
-      x: x + 0.15, y: 2.0, w: cardW - 0.3, h: 1.5,
-      fontSize: count === 4 ? 36 : 40,
-      bold: true,
+      x: x + 0.15, y: cardY + 0.35, w: cardW - 0.3, h: 1.55,
+      fontSize: count === 4 ? 36 : 42, bold: true,
       color: theme.chart[i % theme.chart.length],
-      align: "center",
-      valign: "middle",
-      fontFace: "Calibri",
+      align: "center", valign: "middle", fontFace: "Calibri",
     });
 
     // Trend badge
     if (stat.trend && stat.trend !== "neutral" && stat.trendValue) {
       const trendColor = stat.trend === "up" ? "10B981" : "EF4444";
       const trendIcon = stat.trend === "up" ? "▲" : "▼";
+      const badgeX = x + (cardW - 1.5) / 2;
       slide.addShape("rect", {
-        x: x + (cardW - 1.4) / 2, y: 3.55, w: 1.4, h: 0.35,
-        fill: { color: trendColor },
-        line: { type: "none" },
-        transparency: 85,
+        x: badgeX, y: cardY + 1.95, w: 1.5, h: 0.36,
+        fill: { color: trendColor }, line: { type: "none" }, transparency: 85,
       });
       slide.addText(`${trendIcon} ${stat.trendValue}`, {
-        x: x + (cardW - 1.4) / 2, y: 3.55, w: 1.4, h: 0.35,
-        fontSize: 10,
-        bold: true,
-        color: trendColor,
-        align: "center",
-        valign: "middle",
-        fontFace: "Calibri",
+        x: badgeX, y: cardY + 1.95, w: 1.5, h: 0.36,
+        fontSize: 10, bold: true, color: trendColor,
+        align: "center", valign: "middle", fontFace: "Calibri",
       });
     }
 
     // Label
     slide.addText(stat.label, {
-      x: x + 0.1, y: 4.0, w: cardW - 0.2, h: 0.55,
-      fontSize: 13,
-      bold: true,
-      color: theme.text,
-      align: "center",
-      valign: "middle",
-      fontFace: "Calibri",
+      x: x + 0.1, y: cardY + 2.45, w: cardW - 0.2, h: 0.6,
+      fontSize: 13, bold: true, color: theme.text,
+      align: "center", valign: "middle", fontFace: "Calibri",
     });
 
     // Description
     if (stat.description) {
       slide.addText(stat.description, {
-        x: x + 0.1, y: 4.55, w: cardW - 0.2, h: 1.4,
-        fontSize: 10.5,
-        color: theme.textLight,
-        align: "center",
-        valign: "top",
-        wrap: true,
-        fontFace: "Calibri",
+        x: x + 0.1, y: cardY + 3.1, w: cardW - 0.2, h: cardH - 3.25,
+        fontSize: 10.5, color: theme.textLight,
+        align: "center", valign: "top", wrap: true, fontFace: "Calibri",
       });
     }
   });
 }
 
-// ─── PROCESS SLIDE ───────────────────────────────────────────────────────────
+// ─── PROCESS SLIDE ────────────────────────────────────────────────────────────
 
 function buildProcessSlide(slide: PptxGenJS.Slide, content: SlideContent, theme: Theme) {
   const steps = content.processSteps!.slice(0, 5);
   const count = steps.length;
-  const nodeW = 1.6;
-  const arrowW = 0.55;
+  const nodeW = 1.9;   // width per step slot
+  const arrowW = 0.7;  // connector width
   const totalW = count * nodeW + (count - 1) * arrowW;
-  const startX = (9.8 - totalW) / 2;
-  const nodeY = 1.9;
+  const startX = (SLIDE_W - totalW) / 2; // always >= 0 for LAYOUT_WIDE
+  const nodeY = CONTENT_Y + 0.4;
 
   steps.forEach((step, i) => {
     const x = startX + i * (nodeW + arrowW);
     const col = theme.chart[i % theme.chart.length];
 
-    // Arrow connector (between nodes)
+    // Connector arrow (horizontal bar + arrowhead)
     if (i < count - 1) {
+      const arrowY = nodeY + 0.9; // vertical center of circle
       slide.addShape("rect", {
-        x: x + nodeW, y: nodeY + 0.85, w: arrowW, h: 0.06,
-        fill: { color: col },
-        line: { type: "none" },
-        transparency: 40,
+        x: x + nodeW, y: arrowY - 0.03, w: arrowW, h: 0.06,
+        fill: { color: col }, line: { type: "none" }, transparency: 40,
       });
-      // Arrowhead
+      // Arrowhead triangle (small rect)
       slide.addShape("rect", {
-        x: x + nodeW + arrowW - 0.15, y: nodeY + 0.78, w: 0.15, h: 0.22,
-        fill: { color: col },
-        line: { type: "none" },
-        transparency: 40,
+        x: x + nodeW + arrowW - 0.18, y: arrowY - 0.12, w: 0.18, h: 0.24,
+        fill: { color: col }, line: { type: "none" }, transparency: 40,
       });
     }
 
     // Step circle
+    const circleD = 1.8;
+    const circleX = x + (nodeW - circleD) / 2;
     slide.addShape("ellipse", {
-      x: x + (nodeW - 1.4) / 2, y: nodeY, w: 1.4, h: 1.4,
-      fill: { color: col },
-      line: { type: "none" },
+      x: circleX, y: nodeY, w: circleD, h: circleD,
+      fill: { color: col }, line: { type: "none" },
     });
 
     // Step number
     slide.addText(`${step.stepNumber}`, {
-      x: x + (nodeW - 1.4) / 2, y: nodeY, w: 1.4, h: 1.4,
-      fontSize: 28,
-      bold: true,
-      color: "FFFFFF",
-      align: "center",
-      valign: "middle",
-      fontFace: "Calibri",
+      x: circleX, y: nodeY, w: circleD, h: circleD,
+      fontSize: 30, bold: true, color: "FFFFFF",
+      align: "center", valign: "middle", fontFace: "Calibri",
     });
 
-    // Step title
+    // Step title below circle
     slide.addText(step.title, {
-      x: x - 0.1, y: nodeY + 1.55, w: nodeW + 0.2, h: 0.65,
-      fontSize: 11.5,
-      bold: true,
-      color: theme.text,
-      align: "center",
-      valign: "top",
-      wrap: true,
-      fontFace: "Calibri",
+      x: x - 0.1, y: nodeY + circleD + 0.15, w: nodeW + 0.2, h: 0.6,
+      fontSize: 11.5, bold: true, color: theme.text,
+      align: "center", valign: "top", wrap: true, fontFace: "Calibri",
     });
 
-    // Card description
+    // Description card
+    const descY = nodeY + circleD + 0.85;
+    const descH = FOOTER_Y - descY - 0.1;
     slide.addShape("rect", {
-      x: x - 0.05, y: nodeY + 2.3, w: nodeW + 0.1, h: 2.5,
-      fill: { color: theme.card },
-      line: { color: theme.cardBorder, width: 1 },
+      x: x - 0.05, y: descY, w: nodeW + 0.1, h: descH,
+      fill: { color: theme.card }, line: { color: theme.cardBorder, width: 1 },
     });
-
     slide.addText(step.description, {
-      x: x, y: nodeY + 2.45, w: nodeW, h: 2.2,
-      fontSize: 10,
-      color: theme.textLight,
-      align: "center",
-      valign: "top",
-      wrap: true,
-      fontFace: "Calibri",
+      x: x + 0.05, y: descY + 0.12, w: nodeW - 0.1, h: descH - 0.2,
+      fontSize: 10, color: theme.textLight,
+      align: "center", valign: "top", wrap: true, fontFace: "Calibri",
     });
   });
 }
 
-// ─── COMPARISON SLIDE ────────────────────────────────────────────────────────
+// ─── COMPARISON SLIDE ─────────────────────────────────────────────────────────
 
 function buildComparisonSlide(slide: PptxGenJS.Slide, content: SlideContent, theme: Theme) {
   const cols = content.comparison!.slice(0, 3);
   const colCount = cols.length;
-  const colW = colCount === 3 ? 2.95 : colCount === 2 ? 4.2 : 6.0;
-  const gap = 0.2;
-  const startX = (9.8 - (colW * colCount + gap * (colCount - 1))) / 2;
-  const rowH = 0.62;
-  const headerH = 0.72;
-  const tableY = 1.4;
+  const gap = 0.22;
+  const colW = colCount === 3 ? (CW - gap * 2) / 3
+             : colCount === 2 ? (CW - gap) / 2
+             : CW;
+  const totalW = colW * colCount + gap * (colCount - 1);
+  const startX = (SLIDE_W - totalW) / 2;
+  const rowH = 0.65;
+  const headerH = 0.78;
+  const tableY = CONTENT_Y + 0.1;
 
   cols.forEach((col, ci) => {
     const x = startX + ci * (colW + gap);
-    const col_color = theme.chart[ci % theme.chart.length];
+    const colColor = theme.chart[ci % theme.chart.length];
 
     // Column header
     slide.addShape("rect", {
       x, y: tableY, w: colW, h: headerH,
-      fill: { color: col_color },
-      line: { type: "none" },
+      fill: { color: colColor }, line: { type: "none" },
     });
     slide.addText(col.header, {
       x, y: tableY, w: colW, h: headerH,
-      fontSize: 14,
-      bold: true,
-      color: "FFFFFF",
-      align: "center",
-      valign: "middle",
-      fontFace: "Calibri",
+      fontSize: 14, bold: true, color: "FFFFFF",
+      align: "center", valign: "middle", fontFace: "Calibri",
     });
 
-    // Column rows
-    col.rows.slice(0, 8).forEach((row, ri) => {
+    // Rows
+    const maxRows = Math.floor((FOOTER_Y - tableY - headerH) / rowH);
+    col.rows.slice(0, maxRows).forEach((row, ri) => {
       const rowY = tableY + headerH + ri * rowH;
-      const isEven = ri % 2 === 0;
-
       slide.addShape("rect", {
         x, y: rowY, w: colW, h: rowH,
-        fill: { color: isEven ? theme.card : theme.background },
+        fill: { color: ri % 2 === 0 ? theme.card : theme.background },
         line: { color: theme.cardBorder, width: 0.8 },
       });
       slide.addText(row, {
         x: x + 0.12, y: rowY, w: colW - 0.24, h: rowH,
-        fontSize: 11,
-        color: theme.text,
-        align: "center",
-        valign: "middle",
-        wrap: true,
-        fontFace: "Calibri",
+        fontSize: 11, color: theme.text,
+        align: "center", valign: "middle", wrap: true, fontFace: "Calibri",
       });
     });
   });
 }
 
-// ─── ICON GRID SLIDE ─────────────────────────────────────────────────────────
+// ─── ICON GRID SLIDE ──────────────────────────────────────────────────────────
 
 function buildIconGridSlide(slide: PptxGenJS.Slide, content: SlideContent, theme: Theme) {
   const icons = content.icons!.slice(0, 6);
   const count = icons.length;
   const perRow = count <= 3 ? count : Math.ceil(count / 2);
   const rows = Math.ceil(count / perRow);
+  const gapX = 0.3;
+  const gapY = 0.3;
 
-  const cardW = perRow === 3 ? 3.0 : perRow === 2 ? 4.5 : 9.2;
-  const cardH = rows === 1 ? 4.5 : 2.6;
-  const gapX = 0.25;
-  const gapY = 0.25;
+  const cardW = (CW - gapX * (perRow - 1)) / perRow;
+  const totalH = FOOTER_Y - CONTENT_Y - 0.1;
+  const cardH = (totalH - gapY * (rows - 1)) / rows;
   const totalW = cardW * perRow + gapX * (perRow - 1);
-  const startX = (9.8 - totalW) / 2;
-  const startY = rows === 1 ? 1.8 : 1.45;
+  const startX = (SLIDE_W - totalW) / 2;
+  const startY = CONTENT_Y + 0.1;
 
   icons.forEach((icon, i) => {
     const col = i % perRow;
@@ -641,197 +545,149 @@ function buildIconGridSlide(slide: PptxGenJS.Slide, content: SlideContent, theme
       x, y, w: cardW, h: cardH,
       fill: { color: theme.card },
       line: { color: colColor, width: 1.5 },
-      shadow: {
-        type: "outer",
-        blur: 10, offset: 3, angle: 270,
-        color: "000000", opacity: 0.05,
-      },
+      shadow: { type: "outer", blur: 10, offset: 3, angle: 270, color: "000000", opacity: 0.05 },
     });
-
-    // Top color accent
+    // Top accent
     slide.addShape("rect", {
       x, y, w: cardW, h: 0.18,
-      fill: { color: colColor },
-      line: { type: "none" },
+      fill: { color: colColor }, line: { type: "none" },
     });
 
     // Icon circle
-    const circleSize = rows === 1 ? 1.1 : 0.85;
+    const circleSize = rows === 1 ? 1.2 : 0.95;
     const circleX = x + (cardW - circleSize) / 2;
-    const circleY = y + 0.35;
+    const circleY = y + 0.32;
     slide.addShape("ellipse", {
       x: circleX, y: circleY, w: circleSize, h: circleSize,
-      fill: { color: colColor },
-      line: { type: "none" },
-      transparency: 85,
+      fill: { color: colColor }, line: { type: "none" }, transparency: 85,
     });
-
-    // Emoji icon
     slide.addText(icon.icon, {
       x: circleX, y: circleY, w: circleSize, h: circleSize,
-      fontSize: rows === 1 ? 28 : 22,
-      align: "center",
-      valign: "middle",
-      fontFace: "Segoe UI Emoji",
+      fontSize: rows === 1 ? 30 : 24,
+      align: "center", valign: "middle", fontFace: "Segoe UI Emoji",
     });
 
     // Label
-    const labelY = circleY + circleSize + 0.15;
+    const labelY = circleY + circleSize + 0.12;
     slide.addText(icon.label, {
       x: x + 0.1, y: labelY, w: cardW - 0.2, h: rows === 1 ? 0.55 : 0.45,
-      fontSize: rows === 1 ? 14 : 12,
-      bold: true,
-      color: theme.text,
-      align: "center",
-      valign: "top",
-      fontFace: "Calibri",
+      fontSize: rows === 1 ? 14 : 12, bold: true, color: theme.text,
+      align: "center", valign: "top", fontFace: "Calibri",
     });
 
     // Description
+    const descY = labelY + (rows === 1 ? 0.58 : 0.48);
     slide.addText(icon.description, {
-      x: x + 0.12, y: labelY + (rows === 1 ? 0.58 : 0.48), w: cardW - 0.24, h: rows === 1 ? 1.5 : 1.0,
-      fontSize: rows === 1 ? 11 : 10,
-      color: theme.textLight,
-      align: "center",
-      valign: "top",
-      wrap: true,
-      fontFace: "Calibri",
+      x: x + 0.12, y: descY, w: cardW - 0.24, h: cardH - (descY - y) - 0.1,
+      fontSize: rows === 1 ? 11 : 10, color: theme.textLight,
+      align: "center", valign: "top", wrap: true, fontFace: "Calibri",
     });
   });
 }
 
-// ─── TEXT SLIDE ──────────────────────────────────────────────────────────────
+// ─── TEXT SLIDE ───────────────────────────────────────────────────────────────
 
 function buildTextSlide(slide: PptxGenJS.Slide, content: SlideContent, theme: Theme) {
   if (content.keyPoints.length <= 3) {
-    // Large card-style layout with decorative sidebar
+    // Card-style layout: vertical accent bar + content cards
     slide.addShape("rect", {
-      x: 0, y: 1.15, w: 0.28, h: 5.95,
-      fill: { color: theme.accent },
-      line: { type: "none" },
+      x: 0, y: CONTENT_Y - 0.05, w: 0.28, h: FOOTER_Y - CONTENT_Y + 0.05,
+      fill: { color: theme.accent }, line: { type: "none" },
     });
 
+    const cardH = (FOOTER_Y - CONTENT_Y - 0.15 - 0.15 * (content.keyPoints.length - 1)) / content.keyPoints.length;
+
     content.keyPoints.forEach((pt, i) => {
-      const cardY = 1.45 + i * 2.05;
+      const cardY = CONTENT_Y + i * (cardH + 0.15);
       slide.addShape("rect", {
-        x: 0.42, y: cardY, w: 9.1, h: 1.82,
+        x: PAD - 0.03, y: cardY, w: CW + 0.03, h: cardH,
         fill: { color: theme.card },
         line: { color: theme.cardBorder, width: 1 },
-        shadow: {
-          type: "outer",
-          blur: 8, offset: 2, angle: 270,
-          color: "000000", opacity: 0.04,
-        },
+        shadow: { type: "outer", blur: 8, offset: 2, angle: 270, color: "000000", opacity: 0.04 },
       });
 
       // Number badge
+      const badgeSize = 0.85;
       slide.addShape("ellipse", {
-        x: 0.55, y: cardY + 0.38, w: 0.8, h: 0.8,
-        fill: { color: theme.chart[i % theme.chart.length] },
-        line: { type: "none" },
+        x: PAD + 0.1, y: cardY + (cardH - badgeSize) / 2, w: badgeSize, h: badgeSize,
+        fill: { color: theme.chart[i % theme.chart.length] }, line: { type: "none" },
       });
       slide.addText(`${i + 1}`, {
-        x: 0.55, y: cardY + 0.38, w: 0.8, h: 0.8,
-        fontSize: 16,
-        bold: true,
-        color: "FFFFFF",
-        align: "center",
-        valign: "middle",
-        fontFace: "Calibri",
+        x: PAD + 0.1, y: cardY + (cardH - badgeSize) / 2, w: badgeSize, h: badgeSize,
+        fontSize: 18, bold: true, color: "FFFFFF",
+        align: "center", valign: "middle", fontFace: "Calibri",
       });
 
+      // Card text
       slide.addText(pt, {
-        x: 1.55, y: cardY + 0.12, w: 7.8, h: 1.58,
-        fontSize: 14,
-        color: theme.text,
-        align: "left",
-        valign: "middle",
-        wrap: true,
-        fontFace: "Calibri",
+        x: PAD + 1.1, y: cardY + 0.1, w: CW - 1.2, h: cardH - 0.2,
+        fontSize: 14, color: theme.text,
+        align: "left", valign: "middle", wrap: true, fontFace: "Calibri",
         lineSpacingMultiple: 1.2,
       });
     });
   } else {
-    // Regular bullet list with visual accents
+    // Bullet list layout
     const bulletRows = content.keyPoints.map((pt, i) => ({
       text: pt,
       options: {
         bullet: { type: "bullet" as const, code: "25CF", color: theme.chart[i % theme.chart.length] },
-        fontSize: 14,
-        color: theme.text,
-        fontFace: "Calibri",
-        paraSpaceAfter: 16,
-        indentLevel: 0,
+        fontSize: 14, color: theme.text, fontFace: "Calibri",
+        paraSpaceAfter: 16, indentLevel: 0,
       },
     }));
-
     slide.addText(bulletRows, {
-      x: 0.5, y: 1.4, w: 9.0, h: 5.8,
-      align: "left",
-      valign: "top",
-      wrap: true,
+      x: PAD, y: CONTENT_Y, w: CW - 0.5, h: FOOTER_Y - CONTENT_Y,
+      align: "left", valign: "top", wrap: true,
     });
-
-    // Right decorative strip
     addDecorativeStrip(slide, theme);
   }
 }
 
-// ─── CONCLUSION SLIDE ────────────────────────────────────────────────────────
+// ─── CONCLUSION SLIDE ─────────────────────────────────────────────────────────
 
 function buildConclusionSlide(slide: PptxGenJS.Slide, content: SlideContent, theme: Theme) {
-  // Full gradient background
+  // Full background
   slide.addShape("rect", {
     x: 0, y: 0, w: "100%", h: "100%",
-    fill: { color: theme.primary },
-    line: { type: "none" },
+    fill: { color: theme.primary }, line: { type: "none" },
   });
-
-  // Decorative circles
+  // Decorative circles (intentionally overflow for effect)
   slide.addShape("ellipse", {
     x: -2, y: -2, w: 6, h: 6,
-    fill: { color: theme.secondary },
-    line: { type: "none" },
-    transparency: 88,
+    fill: { color: theme.secondary }, line: { type: "none" }, transparency: 88,
   });
   slide.addShape("ellipse", {
-    x: 7, y: 4, w: 5, h: 5,
-    fill: { color: theme.accent },
-    line: { type: "none" },
-    transparency: 85,
+    x: SLIDE_W - 3, y: SLIDE_H - 3, w: 6, h: 6,
+    fill: { color: theme.accent }, line: { type: "none" }, transparency: 85,
   });
 
   // Center content box
-  slide.addShape("rect", {
-    x: 0.8, y: 0.8, w: 8.4, h: 5.9,
-    fill: { color: "FFFFFF" },
-    line: { type: "none" },
-    transparency: 93,
-  });
+  const boxX = PAD + 0.3;
+  const boxW = SLIDE_W - (boxX * 2);
+  const boxY = 0.7;
+  const boxH = SLIDE_H - 1.2;
 
-  // Accent top bar
   slide.addShape("rect", {
-    x: 0.8, y: 0.8, w: 8.4, h: 0.18,
-    fill: { color: theme.accent },
-    line: { type: "none" },
+    x: boxX, y: boxY, w: boxW, h: boxH,
+    fill: { color: "FFFFFF" }, line: { type: "none" }, transparency: 93,
+  });
+  slide.addShape("rect", {
+    x: boxX, y: boxY, w: boxW, h: 0.18,
+    fill: { color: theme.accent }, line: { type: "none" },
   });
 
   slide.addText(content.title, {
-    x: 1.0, y: 1.3, w: 8.0, h: 1.5,
-    fontSize: 30,
-    bold: true,
-    color: "FFFFFF",
-    align: "center",
-    valign: "middle",
-    fontFace: "Calibri",
+    x: boxX + 0.3, y: boxY + 0.3, w: boxW - 0.6, h: 1.5,
+    fontSize: 30, bold: true, color: "FFFFFF",
+    align: "center", valign: "middle", fontFace: "Calibri",
   });
 
   // Divider
+  const divW = 5.0;
   slide.addShape("rect", {
-    x: 3.0, y: 2.9, w: 4.0, h: 0.05,
-    fill: { color: theme.accent },
-    line: { type: "none" },
-    transparency: 50,
+    x: (SLIDE_W - divW) / 2, y: boxY + 1.9, w: divW, h: 0.05,
+    fill: { color: theme.accent }, line: { type: "none" }, transparency: 50,
   });
 
   if (content.keyPoints?.length > 0) {
@@ -839,18 +695,12 @@ function buildConclusionSlide(slide: PptxGenJS.Slide, content: SlideContent, the
       text: pt,
       options: {
         bullet: { type: "bullet" as const, code: "25CB", color: theme.accent },
-        fontSize: 13.5,
-        color: "FFFFFF",
-        fontFace: "Calibri",
-        paraSpaceAfter: 12,
+        fontSize: 13.5, color: "FFFFFF", fontFace: "Calibri", paraSpaceAfter: 12,
       },
     }));
-
     slide.addText(bulletRows, {
-      x: 1.5, y: 3.1, w: 7.0, h: 3.3,
-      align: "center",
-      valign: "top",
-      wrap: true,
+      x: boxX + 0.5, y: boxY + 2.1, w: boxW - 1.0, h: boxH - 2.4,
+      align: "center", valign: "top", wrap: true,
     });
   }
 }
@@ -864,68 +714,53 @@ function addDecorativeIllustration(
   const cx = x + w / 2;
   const cy = y + h / 2;
 
-  // Abstract network of circles and lines
   const nodes = [
-    { dx: 0, dy: 0, r: 0.65, t: 0 },
-    { dx: -1.1, dy: -1.0, r: 0.4, t: 60 },
-    { dx: 1.0, dy: -0.9, r: 0.5, t: 70 },
-    { dx: -0.9, dy: 1.1, r: 0.45, t: 75 },
-    { dx: 1.1, dy: 1.0, r: 0.38, t: 65 },
-    { dx: 0, dy: -1.8, r: 0.3, t: 80 },
-    { dx: 0, dy: 1.8, r: 0.32, t: 82 },
+    { dx: 0, dy: 0, r: 0.75, t: 0 },
+    { dx: -1.3, dy: -1.1, r: 0.45, t: 60 },
+    { dx: 1.2, dy: -1.0, r: 0.55, t: 70 },
+    { dx: -1.1, dy: 1.2, r: 0.5, t: 75 },
+    { dx: 1.3, dy: 1.1, r: 0.42, t: 65 },
+    { dx: 0, dy: -2.1, r: 0.32, t: 80 },
+    { dx: 0, dy: 2.1, r: 0.35, t: 82 },
   ];
 
+  // Draw circles
   nodes.forEach((n, i) => {
     const col = theme.chart[i % theme.chart.length];
     slide.addShape("ellipse", {
-      x: cx + n.dx - n.r,
-      y: cy + n.dy - n.r,
-      w: n.r * 2,
-      h: n.r * 2,
-      fill: { color: col },
-      line: { type: "none" },
-      transparency: n.t,
+      x: cx + n.dx - n.r, y: cy + n.dy - n.r,
+      w: n.r * 2, h: n.r * 2,
+      fill: { color: col }, line: { type: "none" }, transparency: n.t,
     });
   });
 
-  // Connecting lines from center to each satellite node
-  // We draw them as thin rects (not "line" shapes) to avoid negative dimensions
+  // Connector lines as thin rects (always positive dims)
   for (let i = 1; i < nodes.length; i++) {
     const n = nodes[i];
-    // Start point: center circle
     const x1 = cx + nodes[0].dx;
     const y1 = cy + nodes[0].dy;
-    // End point: satellite node center
     const x2 = cx + n.dx;
     const y2 = cy + n.dy;
-    // Bounding box (always non-negative w/h)
-    const lx = Math.min(x1, x2);
-    const ly = Math.min(y1, y2);
-    const lw = Math.max(Math.abs(x2 - x1), 0.02);
-    const lh = Math.max(Math.abs(y2 - y1), 0.02);
     slide.addShape("rect", {
-      x: lx, y: ly, w: lw, h: lh,
-      fill: { color: theme.secondary },
-      line: { type: "none" },
-      transparency: 70,
+      x: Math.min(x1, x2),
+      y: Math.min(y1, y2),
+      w: Math.max(Math.abs(x2 - x1), 0.02),
+      h: Math.max(Math.abs(y2 - y1), 0.02),
+      fill: { color: theme.secondary }, line: { type: "none" }, transparency: 70,
     });
   }
 }
 
 function addDecorativeStrip(slide: PptxGenJS.Slide, theme: Theme) {
-  // Subtle vertical decoration on the right
   slide.addShape("rect", {
-    x: 9.55, y: 1.2, w: 0.22, h: 5.9,
-    fill: { color: theme.secondary },
-    line: { type: "none" },
-    transparency: 80,
+    x: SLIDE_W - 0.42, y: CONTENT_Y, w: 0.22, h: FOOTER_Y - CONTENT_Y,
+    fill: { color: theme.secondary }, line: { type: "none" }, transparency: 80,
   });
   [0, 1, 2, 3].forEach(i => {
     slide.addShape("ellipse", {
-      x: 9.47, y: 2.0 + i * 1.4, w: 0.38, h: 0.38,
+      x: SLIDE_W - 0.5, y: CONTENT_Y + 0.8 + i * 1.4, w: 0.38, h: 0.38,
       fill: { color: theme.chart[i % theme.chart.length] },
-      line: { type: "none" },
-      transparency: 60,
+      line: { type: "none" }, transparency: 60,
     });
   });
 }
