@@ -18,12 +18,18 @@ export interface GeneratePPTRequest {
   slideCount?: number;
   /** Presentation style (professional/creative/minimal/academic) */
   style?: string;
+  /** Visual theme preset key */
+  themePreset?: string;
+  /** Optional custom primary color in hex format */
+  primaryColor?: string;
   /** Target audience description */
   audience?: string;
   /** Additional requirements or context */
   additionalRequirements?: string;
   /** Whether to use agent skills for enhanced content */
   useAgentSkills?: boolean;
+  /** Whether to stop after outline planning or continue through full generation */
+  generationMode?: "outline-only" | "full";
 }
 
 export interface GeneratePPTResponse {
@@ -39,6 +45,7 @@ export type PPTJobStatusStatus =
 export const PPTJobStatusStatus = {
   pending: "pending",
   planning: "planning",
+  outline_ready: "outline_ready",
   generating: "generating",
   building: "building",
   completed: "completed",
@@ -56,11 +63,102 @@ export const SlideOutlineItemSlideType = {
   qa: "qa",
 } as const;
 
+export type SlideOutlineItemVisualType =
+  (typeof SlideOutlineItemVisualType)[keyof typeof SlideOutlineItemVisualType];
+
+export const SlideOutlineItemVisualType = {
+  chart: "chart",
+  stats: "stats",
+  process: "process",
+  comparison: "comparison",
+  "icon-grid": "icon-grid",
+  "text-only": "text-only",
+} as const;
+
+export type ChartDataChartType =
+  (typeof ChartDataChartType)[keyof typeof ChartDataChartType];
+
+export const ChartDataChartType = {
+  bar: "bar",
+  pie: "pie",
+  line: "line",
+  donut: "donut",
+  area: "area",
+} as const;
+
+export interface ChartSeries {
+  name: string;
+  values: number[];
+}
+
+export interface ChartData {
+  chartType: ChartDataChartType;
+  title: string;
+  labels: string[];
+  series: ChartSeries[];
+}
+
 export interface SlideOutlineItem {
   slideNumber: number;
   title: string;
   keyPoints?: string[];
+  notes?: string;
   slideType?: SlideOutlineItemSlideType;
+  visualType?: SlideOutlineItemVisualType;
+  chartData?: ChartData;
+}
+
+export interface ExportPPTRequestOutline {
+  presentationTitle?: string;
+  theme?: string;
+  slides: SlideOutlineItem[];
+}
+
+export interface ExportPPTRequest {
+  jobId: string;
+  style?: string;
+  themePreset?: string;
+  primaryColor?: string;
+  outline: ExportPPTRequestOutline;
+}
+
+export interface ContinuePPTRequestOutline {
+  presentationTitle?: string;
+  theme?: string;
+  slides: SlideOutlineItem[];
+}
+
+export interface ContinuePPTRequest {
+  jobId: string;
+  style?: string;
+  themePreset?: string;
+  primaryColor?: string;
+  outline: ContinuePPTRequestOutline;
+}
+
+export type RegenerateSlideRequestMode =
+  (typeof RegenerateSlideRequestMode)[keyof typeof RegenerateSlideRequestMode];
+
+export const RegenerateSlideRequestMode = {
+  content: "content",
+  "content-and-notes": "content-and-notes",
+  "content-notes-and-chart": "content-notes-and-chart",
+} as const;
+
+export interface RegenerateSlideRequestOutline {
+  presentationTitle?: string;
+  theme?: string;
+  slides: SlideOutlineItem[];
+}
+
+export interface RegenerateSlideRequest {
+  jobId: string;
+  slideNumber: number;
+  mode: RegenerateSlideRequestMode;
+  style?: string;
+  themePreset?: string;
+  primaryColor?: string;
+  outline: RegenerateSlideRequestOutline;
 }
 
 export interface PPTJobStatus {
@@ -72,6 +170,8 @@ export interface PPTJobStatus {
   currentStep?: string;
   /** Generated slide outline */
   outline?: SlideOutlineItem[];
+  themePreset?: string;
+  primaryColor?: string;
   /** URL to download completed file */
   downloadUrl?: string;
   /** Error message if failed */

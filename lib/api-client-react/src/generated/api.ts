@@ -17,12 +17,16 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  ContinuePPTRequest,
   ErrorResponse,
+  ExportPPTRequest,
   GeneratePPTRequest,
   GeneratePPTResponse,
   HealthStatus,
   PPTHistoryResponse,
   PPTJobStatus,
+  RegenerateSlideRequest,
+  SlideOutlineItem,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -445,3 +449,265 @@ export function useGetPPTHistory<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Build and download a PPTX file from a user-edited outline without rerunning AI generation
+ * @summary Export edited PPT
+ */
+export const getExportPPTUrl = () => {
+  return `/api/ppt/export`;
+};
+
+export const exportPPT = async (
+  exportPPTRequest: ExportPPTRequest,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getExportPPTUrl(), {
+    ...options,
+    method: "POST",
+    responseType: "blob",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(exportPPTRequest),
+  });
+};
+
+export const getExportPPTMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof exportPPT>>,
+    TError,
+    { data: BodyType<ExportPPTRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof exportPPT>>,
+  TError,
+  { data: BodyType<ExportPPTRequest> },
+  TContext
+> => {
+  const mutationKey = ["exportPPT"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof exportPPT>>,
+    { data: BodyType<ExportPPTRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return exportPPT(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ExportPPTMutationResult = NonNullable<
+  Awaited<ReturnType<typeof exportPPT>>
+>;
+export type ExportPPTMutationBody = BodyType<ExportPPTRequest>;
+export type ExportPPTMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Export edited PPT
+ */
+export const useExportPPT = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof exportPPT>>,
+    TError,
+    { data: BodyType<ExportPPTRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof exportPPT>>,
+  TError,
+  { data: BodyType<ExportPPTRequest> },
+  TContext
+> => {
+  return useMutation(getExportPPTMutationOptions(options));
+};
+
+/**
+ * Continue enriching content and building the PPTX file from a confirmed outline
+ * @summary Continue PPT generation from outline
+ */
+export const getContinuePPTUrl = () => {
+  return `/api/ppt/continue`;
+};
+
+export const continuePPT = async (
+  continuePPTRequest: ContinuePPTRequest,
+  options?: RequestInit,
+): Promise<GeneratePPTResponse> => {
+  return customFetch<GeneratePPTResponse>(getContinuePPTUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(continuePPTRequest),
+  });
+};
+
+export const getContinuePPTMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof continuePPT>>,
+    TError,
+    { data: BodyType<ContinuePPTRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof continuePPT>>,
+  TError,
+  { data: BodyType<ContinuePPTRequest> },
+  TContext
+> => {
+  const mutationKey = ["continuePPT"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof continuePPT>>,
+    { data: BodyType<ContinuePPTRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return continuePPT(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ContinuePPTMutationResult = NonNullable<
+  Awaited<ReturnType<typeof continuePPT>>
+>;
+export type ContinuePPTMutationBody = BodyType<ContinuePPTRequest>;
+export type ContinuePPTMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Continue PPT generation from outline
+ */
+export const useContinuePPT = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof continuePPT>>,
+    TError,
+    { data: BodyType<ContinuePPTRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof continuePPT>>,
+  TError,
+  { data: BodyType<ContinuePPTRequest> },
+  TContext
+> => {
+  return useMutation(getContinuePPTMutationOptions(options));
+};
+
+/**
+ * Regenerate one slide from the current outline context without rerunning the full job
+ * @summary Regenerate a single slide
+ */
+export const getRegenerateSlideUrl = () => {
+  return `/api/ppt/regenerate-slide`;
+};
+
+export const regenerateSlide = async (
+  regenerateSlideRequest: RegenerateSlideRequest,
+  options?: RequestInit,
+): Promise<SlideOutlineItem> => {
+  return customFetch<SlideOutlineItem>(getRegenerateSlideUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(regenerateSlideRequest),
+  });
+};
+
+export const getRegenerateSlideMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof regenerateSlide>>,
+    TError,
+    { data: BodyType<RegenerateSlideRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof regenerateSlide>>,
+  TError,
+  { data: BodyType<RegenerateSlideRequest> },
+  TContext
+> => {
+  const mutationKey = ["regenerateSlide"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof regenerateSlide>>,
+    { data: BodyType<RegenerateSlideRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return regenerateSlide(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RegenerateSlideMutationResult = NonNullable<
+  Awaited<ReturnType<typeof regenerateSlide>>
+>;
+export type RegenerateSlideMutationBody = BodyType<RegenerateSlideRequest>;
+export type RegenerateSlideMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Regenerate a single slide
+ */
+export const useRegenerateSlide = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof regenerateSlide>>,
+    TError,
+    { data: BodyType<RegenerateSlideRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof regenerateSlide>>,
+  TError,
+  { data: BodyType<RegenerateSlideRequest> },
+  TContext
+> => {
+  return useMutation(getRegenerateSlideMutationOptions(options));
+};

@@ -33,12 +33,13 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
-            {/* Sidebar navigation */}
+          <div className="app-shell flex h-screen overflow-hidden font-sans">
             <Sidebar />
-            
-            {/* Main scrollable content area */}
-            <main className="flex-1 overflow-y-auto relative bg-slate-50/50">
+
+            <main className="relative flex-1 overflow-y-auto">
+              <div className="aurora-orb left-[15%] top-20 h-64 w-64 bg-primary/10" />
+              <div className="aurora-orb right-[10%] top-64 h-80 w-80 bg-white/5 [animation-delay:1.5s]" />
+              <div className="aurora-orb bottom-20 left-1/3 h-72 w-72 bg-primary/10 -translate-x-1/2 [animation-delay:2s]" />
               <Router />
             </main>
           </div>

@@ -1,0 +1,7 @@
+<svg width="400" height="400" viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M120 180H60C60 113.8 113.8 60 180 60V120C146.9 120 120 146.9 120 180Z" fill="#PRIMARY_COLOR" fill-opacity="0.15"/>
+  <path d="M180 180V300H60V180H120ZM180 180C146.9 180 120 146.9 120 120C153.1 120 180 146.9 180 180Z" fill="#PRIMARY_COLOR" fill-opacity="0.2"/>
+  <path d="M300 180H240C240 113.8 293.8 60 360 60V120C326.9 120 300 146.9 300 180Z" fill="#PRIMARY_COLOR" fill-opacity="0.15"/>
+  <path d="M360 180V300H240V180H300ZM360 180C326.9 180 300 146.9 300 120C333.1 120 360 146.9 360 180Z" fill="#PRIMARY_COLOR" fill-opacity="0.2"/>
+  <circle cx="200" cy="200" r="150" fill="#PRIMARY_COLOR" fill-opacity="0.03" />
+</svg>

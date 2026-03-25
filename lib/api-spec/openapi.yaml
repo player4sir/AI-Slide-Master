@@ -122,6 +122,103 @@ paths:
               schema:
                 $ref: "#/components/schemas/PPTHistoryResponse"
 
+  /ppt/export:
+    post:
+      operationId: exportPPT
+      tags: [ppt]
+      summary: Export edited PPT
+      description: Build and download a PPTX file from a user-edited outline without rerunning AI generation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExportPPTRequest"
+      responses:
+        "200":
+          description: PPTX file download
+          content:
+            application/vnd.openxmlformats-officedocument.presentationml.presentation:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ppt/continue:
+    post:
+      operationId: continuePPT
+      tags: [ppt]
+      summary: Continue PPT generation from outline
+      description: Continue enriching content and building the PPTX file from a confirmed outline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContinuePPTRequest"
+      responses:
+        "200":
+          description: PPT generation resumed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratePPTResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ppt/regenerate-slide:
+    post:
+      operationId: regenerateSlide
+      tags: [ppt]
+      summary: Regenerate a single slide
+      description: Regenerate one slide from the current outline context without rerunning the full job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegenerateSlideRequest"
+      responses:
+        "200":
+          description: Regenerated slide content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlideOutlineItem"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -150,6 +247,13 @@ components:
           type: string
           description: Presentation style (professional/creative/minimal/academic)
           default: professional
+        themePreset:
+          type: string
+          description: Visual theme preset key
+          default: professional
+        primaryColor:
+          type: string
+          description: Optional custom primary color in hex format
         audience:
           type: string
           description: Target audience description
@@ -160,6 +264,11 @@ components:
           type: boolean
           description: Whether to use agent skills for enhanced content
           default: true
+        generationMode:
+          type: string
+          enum: [outline-only, full]
+          description: Whether to stop after planning the outline or continue through full PPT generation
+          default: full
       required:
         - topic
 
@@ -184,7 +293,7 @@ components:
           type: string
         status:
           type: string
-          enum: [pending, planning, generating, building, completed, failed]
+          enum: [pending, planning, outline_ready, generating, building, completed, failed]
         progress:
           type: integer
           description: Progress percentage 0-100
@@ -196,6 +305,10 @@ components:
           description: Generated slide outline
           items:
             $ref: "#/components/schemas/SlideOutlineItem"
+        themePreset:
+          type: string
+        primaryColor:
+          type: string
         downloadUrl:
           type: string
           description: URL to download completed file
@@ -224,12 +337,146 @@ components:
           type: array
           items:
             type: string
+        notes:
+          type: string
         slideType:
           type: string
           enum: [title, content, section, conclusion, qa]
+        visualType:
+          type: string
+          enum: [chart, stats, process, comparison, icon-grid, text-only]
+        chartData:
+          $ref: "#/components/schemas/ChartData"
       required:
         - slideNumber
         - title
+
+    ChartSeries:
+      type: object
+      properties:
+        name:
+          type: string
+        values:
+          type: array
+          items:
+            type: number
+      required:
+        - name
+        - values
+
+    ChartData:
+      type: object
+      properties:
+        chartType:
+          type: string
+          enum: [bar, pie, line, donut, area]
+        title:
+          type: string
+        labels:
+          type: array
+          items:
+            type: string
+        series:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChartSeries"
+      required:
+        - chartType
+        - title
+        - labels
+        - series
+
+    ExportPPTRequest:
+      type: object
+      properties:
+        jobId:
+          type: string
+        style:
+          type: string
+        themePreset:
+          type: string
+        primaryColor:
+          type: string
+        outline:
+          type: object
+          properties:
+            presentationTitle:
+              type: string
+            theme:
+              type: string
+            slides:
+              type: array
+              items:
+                $ref: "#/components/schemas/SlideOutlineItem"
+          required:
+            - slides
+      required:
+        - jobId
+        - outline
+
+    ContinuePPTRequest:
+      type: object
+      properties:
+        jobId:
+          type: string
+        style:
+          type: string
+          default: professional
+        themePreset:
+          type: string
+        primaryColor:
+          type: string
+        outline:
+          type: object
+          properties:
+            presentationTitle:
+              type: string
+            theme:
+              type: string
+            slides:
+              type: array
+              items:
+                $ref: "#/components/schemas/SlideOutlineItem"
+          required:
+            - slides
+      required:
+        - jobId
+        - outline
+
+    RegenerateSlideRequest:
+      type: object
+      properties:
+        jobId:
+          type: string
+        slideNumber:
+          type: integer
+        mode:
+          type: string
+          enum: [content, content-and-notes, content-notes-and-chart]
+        style:
+          type: string
+        themePreset:
+          type: string
+        primaryColor:
+          type: string
+        outline:
+          type: object
+          properties:
+            presentationTitle:
+              type: string
+            theme:
+              type: string
+            slides:
+              type: array
+              items:
+                $ref: "#/components/schemas/SlideOutlineItem"
+          required:
+            - slides
+      required:
+        - jobId
+        - slideNumber
+        - mode
+        - outline
 
     PPTHistoryItem:
       type: object
